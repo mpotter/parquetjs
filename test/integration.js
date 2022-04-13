@@ -8,6 +8,7 @@ const parquet_thrift = require('../gen-nodejs/parquet_types');
 const parquet_util = require('../lib/util');
 const objectStream = require('object-stream');
 const stream = require('stream')
+const {expect} = require("chai");
 
 const TEST_NUM_ROWS = 10000;
 const TEST_VTIME =  new Date();
@@ -482,6 +483,58 @@ describe('Parquet', function() {
       return await writeTestFile(opts).then(readTestFile);
     });
 
+    it('write a Uint8Array field and then read it back', async function() {
+      const opts = { useDataPageV2: true, compression: 'UNCOMPRESSED' };
+      const schema = new parquet.ParquetSchema({
+        data: { type: 'BYTE_ARRAY', compression: opts.compression },
+      });
+      let writer = await parquet.ParquetWriter.openFile(schema, 'fruits.parquet', opts);
+      writer.setMetadata("myuid", "420");
+      writer.setMetadata("fnord", "dronf");
+
+      await writer.appendRow({ data: Uint8Array.from([12345,365]), });
+      await writer.close();
+
+      let reader = await parquet.ParquetReader.openFile('fruits.parquet');
+      assert.equal(reader.getRowCount(), 1);
+      assert.deepEqual(reader.getMetadata(), { "myuid": "420", "fnord": "dronf" })
+
+      let readSchema = reader.getSchema();
+      assert.equal(readSchema.fieldList.length, 1);
+      assert(schema.fields.data);
+
+      let cursor = reader.getCursor();
+      assert.deepEqual(await cursor.next(), { data: Uint8Array.from([12345,365]) });
+
+      assert.equal(await cursor.next(), null);
+    });
+
+    const non_exhaustive_unsupported_list = [
+      { data: Uint16Array.from([12345,365]), },
+      { data: Uint32Array.from([12345,365]), },
+      { data: Float32Array.from([12345,365]), },
+      { data: Float64Array.from([12345,365]), },
+    ]
+
+    non_exhaustive_unsupported_list.forEach((row) => {
+      it('unsupported typed array '+ row.data.constructor.name +' should throw error', async function() {
+        const opts = { useDataPageV2: true, compression: 'UNCOMPRESSED' };
+        const schema = new parquet.ParquetSchema({
+          data: { type: 'BYTE_ARRAY', compression: opts.compression },
+        });
+        let writer = await parquet.ParquetWriter.openFile(schema, 'fruits.parquet', opts);
+        let gotError = false
+        try {
+          await writer.appendRow(row);
+          await writer.close();
+        } catch (e) {
+          gotError = true;
+          expect(e).to.match(/is not supported/);
+        }
+        expect(gotError).to.eq(true)
+      });
+    })
+
   });
 
   describe('using the Stream/Transform API', function() {
@@ -518,9 +571,10 @@ describe('Parquet', function() {
           .on('finish',resolve);
       })
       .then(
-        () => { throw new Error('Should emit error'); },
-        () => undefined
+          () => { throw new Error('Should emit error'); },
+          () => undefined
       );
     });
   });
 });
+
