@@ -10,7 +10,7 @@
     "noImplicitAny": true,
     "outDir": "dist",
     "resolveJsonModule": true,
-    "sourceMap": true,
+    "sourceMap": false,
     "strict": true,
     "target": "ESNext",
     "watch": false,
@@ -19,7 +19,7 @@
       "gen-nodejs",
     ]
   },
-  "include":  ["parquet.js","lib/**/*", "gen-nodejs/*"],
+  "include":  ["parquet.ts","lib/**/*", "gen-nodejs/*"],
   "files": ["lib/custom.d.ts"],
   "ts-node": {
     "files": true
