@@ -1,8 +1,10 @@
 // Lifted from https://github.com/kbajalc/parquets
 
 import parquet_thrift from "../../gen-nodejs/parquet_types";
-import { Statistics, OffsetIndex, ColumnIndex, PageType, DataPageHeader, DataPageHeaderV2, DictionaryPageHeader, IndexPageHeader, Type, SchemaElement } from "../../gen-nodejs/parquet_types";
+import { Statistics, OffsetIndex, ColumnIndex, PageType, DataPageHeader, DataPageHeaderV2, DictionaryPageHeader, IndexPageHeader, Type, ColumnMetaData } from "../../gen-nodejs/parquet_types";
 import SplitBlockBloomFilter from "lib/bloom/sbbf";
+import { createSBBFParams } from "lib/bloomFilterIO/bloomFilterWriter";
+import Int64 from 'node-int64'
 
 export type ParquetCodec = 'PLAIN' | 'RLE';
 export type ParquetCompression = 'UNCOMPRESSED' | 'GZIP' | 'SNAPPY' | 'LZO' | 'BROTLI' | 'LZ4';
@@ -99,50 +101,23 @@ export interface ParquetRecord {
     [key: string]: any;
 }
 
-export interface Offset {
-    buffer: Buffer
-    offset: number
-}
-
-export interface ColumnMetaData {
-    type: Type,
-    encodings: Array<any>,
-    path_in_schema: Array<string>,
-    codec: number,
-    num_values: number,
-    total_uncompressed_size: any,
-    total_compressed_size: any,
-    key_value_metadata: any,
-    data_page_offset: Offset,
-    index_page_offset: Offset,
-    dictionary_page_offset: Offset,
-    statistics: any,
-    encoding_stats: any,
-    bloom_filter_offset: Offset
-}
-
-export interface ColumnData {
-    file_path: string,
-    file_offset: Offset,
-    meta_data: ColumnMetaData
-    offset_index_length?: number;
-    column_index_length?: number;
-    encrypted_column_metadata?: Buffer;
-    offsetIndex?: OffsetIndex;
-    offset_index_offset?: number;
-    columnIndex?: ColumnIndex;
-    column_index_offset?: number;
-}
-
 export interface ColumnChunkData {
     rowGroupIndex: number,
-    column: ColumnData
+    column: parquet_thrift.ColumnChunk
 }
 
-export declare class RowGroup {
-    columns: ColumnData[];
-    num_rows: number;
-    ordinal?: number;
+export interface ColumnChunkExt extends parquet_thrift.ColumnChunk{
+    meta_data?: ColumnMetaDataExt
+    columnIndex?: ColumnIndex | Promise<ColumnIndex>
+    offsetIndex?: OffsetIndex | Promise<OffsetIndex>
+}
+export interface ColumnMetaDataExt extends parquet_thrift.ColumnMetaData {
+    offsetIndex?: OffsetIndex
+    columnIndex?: ColumnIndex
+}
+
+export interface RowGroupExt extends parquet_thrift.RowGroup {
+    columns: ColumnChunkExt[];
 }
 
 export declare class KeyValue {
@@ -172,7 +147,7 @@ export interface PageData {
     pageHeader?: PageHeader;
     count?: number;
     dictionary?: Array<unknown>
-    column?: ColumnData
+    column?: parquet_thrift.ColumnChunk
 }
 
 export declare class PageHeader {
@@ -186,7 +161,7 @@ export declare class PageHeader {
     data_page_header_v2?: DataPageHeaderV2;
     offset?: number;
     headerSize?: number;
-  
+
       constructor(args?: { type: PageType; uncompressed_page_size: number; compressed_page_size: number; crc?: number; data_page_header?: DataPageHeader; index_page_header?: IndexPageHeader; dictionary_page_header?: DictionaryPageHeader; data_page_header_v2?: DataPageHeaderV2; });
   }
 
@@ -206,13 +181,9 @@ export declare class PageHeader {
     getObject: (args: any) => PromiseS3
 }
 
-export class NewFileMetaData extends parquet_thrift.FileMetaData {
+export interface FileMetaDataExt extends parquet_thrift.FileMetaData {
     json?:JSON;
-    //@ts-ignore
-    row_groups:RowGroup[];
-    constructor() {
-      super()
-    } 
+    row_groups: RowGroupExt[];
   }
 
 export class NewPageHeader extends parquet_thrift.PageHeader {
@@ -220,7 +191,31 @@ export class NewPageHeader extends parquet_thrift.PageHeader {
     headerSize?: number;
     constructor() {
       super()
-    } 
+    }
   }
-  
-  
+
+export type WriterOptions = {
+    pageIndex?: boolean;
+    pageSize?: number;
+    useDataPageV2?: boolean;
+    bloomFilters?: createSBBFParams[];
+    baseOffset?: Int64;
+    rowGroupSize?: number;
+    flags?: string;
+    encoding?: BufferEncoding;
+    fd?: number;
+    mode?: number;
+    autoClose?: boolean;
+    emitClose?: boolean;
+    start?: number;
+    highWaterMark?: number;
+}
+
+export type Page = {
+    page: Buffer,
+    statistics: parquet_thrift.Statistics,
+    first_row_index: number,
+    distinct_values: Set<any>,
+    num_values: number,
+    count?: number,
+}

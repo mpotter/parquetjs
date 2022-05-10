@@ -1,14 +1,17 @@
-'use strict';
-const stream = require('stream');
-const parquet_thrift = require('../gen-nodejs/parquet_types')
-const parquet_shredder = require('./shred')
-const parquet_util = require('./util')
-const parquet_codec = require('./codec')
-const parquet_compression = require('./compression')
-const parquet_types = require('./types');
-const bloomFilterWriter = require("./bloomFilterIO/bloomFilterWriter")
-
-const Long = require('long');
+import stream from 'stream'
+import parquet_thrift from '../gen-nodejs/parquet_types'
+import * as parquet_shredder from './shred'
+import * as parquet_util from './util'
+import * as parquet_codec from './codec'
+import * as parquet_compression from './compression'
+import * as parquet_types from './types'
+import * as bloomFilterWriter from "./bloomFilterIO/bloomFilterWriter"
+import { WriterOptions, ParquetCodec, ParquetField, ColumnMetaDataExt, RowGroupExt, Page } from './types/types'
+import { Options } from './codec/types'
+import { ParquetSchema } from './schema'
+import { WriteStream } from 'fs'
+import Int64 from 'node-int64'
+import SplitBlockBloomFilter from './bloom/sbbf'
 
 /**
  * Parquet File Magic String
@@ -37,13 +40,20 @@ const PARQUET_RDLVL_ENCODING = 'RLE';
  * buffering/batching for performance, so close() must be called after all rows
  * are written.
  */
-class ParquetWriter {
+export class ParquetWriter {
+
+  schema: ParquetSchema;
+  envelopeWriter: ParquetEnvelopeWriter | null;
+  rowBuffer: parquet_shredder.RecordBuffer;
+  rowGroupSize: number;
+  closed: boolean;
+  userMetadata: Record<string, string>;
 
   /**
    * Convenience method to create a new buffered parquet writer that writes to
    * the specified file
    */
-  static async openFile(schema, path, opts) {
+  static async openFile(schema: ParquetSchema, path: string | Buffer | URL, opts?: WriterOptions) {
     let outputStream = await parquet_util.osopen(path, opts);
     return ParquetWriter.openStream(schema, outputStream, opts);
   }
@@ -52,7 +62,7 @@ class ParquetWriter {
    * Convenience method to create a new buffered parquet writer that writes to
    * the specified stream
    */
-  static async openStream(schema, outputStream, opts) {
+  static async openStream(schema: ParquetSchema, outputStream: WriteStream, opts?: WriterOptions) {
     if (!opts) {
       opts = {};
     }
@@ -68,11 +78,11 @@ class ParquetWriter {
   /**
    * Create a new buffered parquet writer for a given envelope writer
    */
-  constructor(schema, envelopeWriter, opts) {
+  constructor(schema: ParquetSchema, envelopeWriter: ParquetEnvelopeWriter, opts?: WriterOptions) {
     this.schema = schema;
     this.envelopeWriter = envelopeWriter;
     this.rowBuffer = {};
-    this.rowGroupSize = opts.rowGroupSize || PARQUET_DEFAULT_ROW_GROUP_SIZE;
+    this.rowGroupSize = (opts as WriterOptions).rowGroupSize || PARQUET_DEFAULT_ROW_GROUP_SIZE;
     this.closed = false;
     this.userMetadata = {};
 
@@ -88,8 +98,8 @@ class ParquetWriter {
    * Append a single row to the parquet file. Rows are buffered in memory until
    * rowGroupSize rows are in the buffer or close() is called
    */
-  async appendRow(row) {
-    if (this.closed) {
+  async appendRow(row: Record<string, unknown>) {
+    if (this.closed || this.envelopeWriter === null) {
       throw 'writer was closed';
     }
 
@@ -99,11 +109,11 @@ class ParquetWriter {
       useDataPageV2: this.envelopeWriter.useDataPageV2,
       bloomFilters: this.envelopeWriter.bloomFilters
     };
-    if (this.rowBuffer.pageRowCount >= this.envelopeWriter.pageSize) {
+    if (this.rowBuffer.pageRowCount! >= this.envelopeWriter.pageSize) {
       await encodePages(this.schema, this.rowBuffer, options);
     }
 
-    if (this.rowBuffer.rowCount >= this.rowGroupSize) {
+    if (this.rowBuffer.rowCount! >= this.rowGroupSize) {
       await encodePages(this.schema, this.rowBuffer, options);
       await this.envelopeWriter.writeRowGroup(this.rowBuffer);
       this.rowBuffer = {};
@@ -116,25 +126,28 @@ class ParquetWriter {
    * method twice on the same object or add any rows after the close() method has
    * been called
    */
-  async close(callback) {
+  async close(callback?: Function) {
     if (this.closed) {
       throw 'writer was closed';
     }
 
     this.closed = true;
 
-    if (this.rowBuffer.rowCount > 0 || this.rowBuffer.rowCount >= this.rowGroupSize) {
-      await encodePages(this.schema, this.rowBuffer, { useDataPageV2: this.envelopeWriter.useDataPageV2, bloomFilters: this.envelopeWriter.bloomFilters});
+    if (this.envelopeWriter) {
+      if (this.rowBuffer.rowCount! > 0 || this.rowBuffer.rowCount! >= this.rowGroupSize) {
+        await encodePages(this.schema, this.rowBuffer, { useDataPageV2: this.envelopeWriter.useDataPageV2, bloomFilters: this.envelopeWriter.bloomFilters});
 
-      await this.envelopeWriter.writeRowGroup(this.rowBuffer);
-      this.rowBuffer = {};
+        await this.envelopeWriter.writeRowGroup(this.rowBuffer);
+        this.rowBuffer = {};
+      }
+
+
+      await this.envelopeWriter.writeBloomFilters();
+      await this.envelopeWriter.writeIndex();
+      await this.envelopeWriter.writeFooter(this.userMetadata);
+      await this.envelopeWriter.close();
+      this.envelopeWriter = null;
     }
-
-    await this.envelopeWriter.writeBloomFilters();
-    await this.envelopeWriter.writeIndex();
-    await this.envelopeWriter.writeFooter(this.userMetadata);
-    await this.envelopeWriter.close();
-    this.envelopeWriter = null;
 
     if (callback) {
       callback();
@@ -144,7 +157,7 @@ class ParquetWriter {
   /**
    * Add key<>value metadata to the file
    */
-  setMetadata(key, value) {
+  setMetadata(key: string, value: string) {
     this.userMetadata[key.toString()] = value.toString();
   }
 
@@ -154,7 +167,7 @@ class ParquetWriter {
    * of rows that are co-located on disk. A higher value is generally better for
    * read-time I/O performance at the tradeoff of write-time memory usage.
    */
-  setRowGroupSize(cnt) {
+  setRowGroupSize(cnt: number) {
     this.rowGroupSize = cnt;
   }
 
@@ -162,8 +175,8 @@ class ParquetWriter {
    * Set the parquet data page size. The data page size controls the maximum
    * number of column values that are written to disk as a consecutive array
    */
-  setPageSize(cnt) {
-    this.writer.setPageSize(cnt);
+  setPageSize(cnt: number) {
+    this.envelopeWriter!.setPageSize(cnt);
   }
 
 }
@@ -171,30 +184,40 @@ class ParquetWriter {
 /**
  * Create a parquet file from a schema and a number of row groups. This class
  * performs direct, unbuffered writes to the underlying output stream and is
- * intendend for advanced and internal users; the writeXXX methods must be
+ * intended for advanced and internal users; the writeXXX methods must be
  * called in the correct order to produce a valid file.
  */
-class ParquetEnvelopeWriter {
+export class ParquetEnvelopeWriter {
+  schema: ParquetSchema
+  write: Function;
+  close: Function;
+  offset: Int64
+  rowCount: Int64
+  rowGroups: RowGroupExt[]
+  pageSize: number;
+  useDataPageV2: boolean;
+  pageIndex: boolean;
+  bloomFilters: Record<string, SplitBlockBloomFilter> // TODO: OR filterCollection
 
   /**
    * Create a new parquet envelope writer that writes to the specified stream
    */
-  static async openStream(schema, outputStream, opts) {
+  static async openStream(schema: ParquetSchema, outputStream: WriteStream, opts: WriterOptions) {
     let writeFn = parquet_util.oswrite.bind(undefined, outputStream);
     let closeFn = parquet_util.osend.bind(undefined, outputStream);
-    return new ParquetEnvelopeWriter(schema, writeFn, closeFn, 0, opts);
+    return new ParquetEnvelopeWriter(schema, writeFn, closeFn, new Int64(0), opts);
   }
 
-  constructor(schema, writeFn, closeFn, fileOffset, opts) {
+  constructor(schema: ParquetSchema, writeFn: Function, closeFn: Function, fileOffset: Int64, opts: WriterOptions) {
     this.schema = schema;
     this.write = writeFn;
     this.close = closeFn;
     this.offset = fileOffset;
-    this.rowCount = 0;
+    this.rowCount = new Int64(0);
     this.rowGroups = [];
     this.pageSize =  opts.pageSize || PARQUET_DEFAULT_PAGE_SIZE;
-    this.useDataPageV2 = ("useDataPageV2" in opts) ? opts.useDataPageV2 : true;
-    this.pageIndex = opts.pageIndex;
+    this.useDataPageV2 = ("useDataPageV2" in opts) ? opts.useDataPageV2! : true;
+    this.pageIndex = opts.pageIndex!;
     this.bloomFilters = {};
 
     (opts.bloomFilters || []).forEach(bloomOption => {
@@ -202,8 +225,8 @@ class ParquetEnvelopeWriter {
     });
   }
 
-  writeSection(buf) {
-    this.offset += buf.length;
+  writeSection(buf: Buffer) {
+    this.offset.setValue(this.offset.valueOf() + buf.length)
     return this.write(buf);
   }
 
@@ -218,7 +241,7 @@ class ParquetEnvelopeWriter {
    * Encode a parquet row group. The records object should be created using the
    * shredRecord method
    */
-  async writeRowGroup(records) {
+  async writeRowGroup(records: parquet_shredder.RecordBuffer) {
     let rgroup = await encodeRowGroup(
         this.schema,
         records,
@@ -229,17 +252,16 @@ class ParquetEnvelopeWriter {
           pageIndex: this.pageIndex
         });
 
-    this.rowCount += records.rowCount;
+    this.rowCount.setValue(this.rowCount.valueOf() + records.rowCount!);
     this.rowGroups.push(rgroup.metadata);
     return this.writeSection(rgroup.body);
   }
 
-  writeBloomFilters(_rowGroups) {
-    let rowGroups = _rowGroups || this.rowGroups;
-    rowGroups.forEach(group => {
+  writeBloomFilters() {
+    this.rowGroups.forEach(group => {
       group.columns.forEach(column => {
-        const columnName = column.meta_data.path_in_schema[0];
-        if (columnName in this.bloomFilters === false) return;
+        const columnName = column.meta_data?.path_in_schema[0];
+        if (!columnName || columnName in this.bloomFilters === false) return;
 
         const serializedBloomFilterData =
           bloomFilterWriter.getSerializedBloomFilterData(this.bloomFilters[columnName]);
@@ -254,25 +276,24 @@ class ParquetEnvelopeWriter {
   /**
    * Write the columnIndices and offsetIndices
    */
-  writeIndex(_rowGroups) {
-    let rowGroups = _rowGroups || this.rowGroups;
+  writeIndex() {
     this.schema.fieldList.forEach( (c,i) => {
-      rowGroups.forEach(group => {
+      this.rowGroups.forEach(group => {
         let column = group.columns[i];
         if (!column) return;
 
-        if (column.meta_data.columnIndex) {
+        if (column.meta_data?.columnIndex) {
           let columnBody = parquet_util.serializeThrift(column.meta_data.columnIndex);
           delete column.meta_data.columnIndex;
-          column.column_index_offset = this.offset;
+          column.column_index_offset = parquet_util.cloneInteger(this.offset);
           column.column_index_length = columnBody.length;
           this.writeSection(columnBody);
         }
 
-        if (column.meta_data.offsetIndex) {
+        if (column.meta_data?.offsetIndex) {
           let offsetBody = parquet_util.serializeThrift(column.meta_data.offsetIndex);
           delete column.meta_data.offsetIndex;
-          column.offset_index_offset = this.offset;
+          column.offset_index_offset = parquet_util.cloneInteger(this.offset);
           column.offset_index_length = offsetBody.length;
           this.writeSection(offsetBody);
         }
@@ -283,7 +304,7 @@ class ParquetEnvelopeWriter {
   /**
    * Write the parquet file footer
    */
-  writeFooter(userMetadata, schema, rowCount, rowGroups) {
+  writeFooter(userMetadata: Record<string, string>) {
     if (!userMetadata) {
       userMetadata = {};
     }
@@ -300,7 +321,7 @@ class ParquetEnvelopeWriter {
    * Set the parquet data page size. The data page size controls the maximum
    * number of column values that are written to disk as a consecutive array
    */
-  setPageSize(cnt) {
+  setPageSize(cnt: number) {
     this.pageSize = cnt;
   }
 
@@ -309,30 +330,32 @@ class ParquetEnvelopeWriter {
 /**
  * Create a parquet transform stream
  */
-class ParquetTransformer extends stream.Transform {
+export class ParquetTransformer extends stream.Transform {
 
-  constructor(schema, opts = {}) {
+  writer: ParquetWriter;
+
+  constructor(schema: ParquetSchema, opts = {}) {
     super({ objectMode: true });
 
     let writeProxy = (function(t) {
-      return function(b) {
+      return function(b: unknown) {
         t.push(b);
       }
     })(this);
 
     this.writer = new ParquetWriter(
         schema,
-        new ParquetEnvelopeWriter(schema, writeProxy, function() {}, 0, opts),
+        new ParquetEnvelopeWriter(schema, writeProxy, function() {}, new Int64(0), opts),
         opts);
   }
 
-  _transform(row, encoding, callback) {
+  _transform(row: Record<string, unknown>, _encoding: string, callback: Function) {
     if (row) {
       this.writer.appendRow(row).then(
         data => callback(null, data),
         err => {
           const fullErr = new Error(`Error transforming to parquet: ${err.toString()} row:${row}`);
-          fullErr.origErr = err;
+          fullErr.message = err;
           callback(fullErr);
         }
       );
@@ -341,7 +364,7 @@ class ParquetTransformer extends stream.Transform {
     }
   }
 
-  _flush(callback) {
+  _flush(callback: (foo: any, bar?: any) => any) {
     this.writer.close()
       .then(d => callback(null, d), callback);
   }
@@ -351,7 +374,7 @@ class ParquetTransformer extends stream.Transform {
 /**
  * Encode a consecutive array of data using one of the parquet encodings
  */
-function encodeValues(type, encoding, values, opts) {
+function encodeValues(type: string, encoding: ParquetCodec, values: number[], opts: any) {
   if (!(encoding in parquet_codec)) {
     throw 'invalid encoding: ' + encoding;
   }
@@ -359,7 +382,7 @@ function encodeValues(type, encoding, values, opts) {
   return parquet_codec[encoding].encodeValues(type, values, opts);
 }
 
-function encodeStatisticsValue(value, column) {
+function encodeStatisticsValue(value: any, column: ParquetField | Options) {
   if (value === undefined) {
     return Buffer.alloc(0);
   }
@@ -367,12 +390,12 @@ function encodeStatisticsValue(value, column) {
     value = parquet_types.toPrimitive(column.originalType,value);
   }
   if (column.primitiveType !== 'BYTE_ARRAY') {
-    value = encodeValues(column.primitiveType,'PLAIN',[value],column);
+    value = encodeValues(column.primitiveType!,'PLAIN',[value],column);
   }
   return value;
 }
 
-function encodeStatistics(statistics,column) {
+function encodeStatistics(statistics: parquet_thrift.Statistics,column: ParquetField | Options) {
   statistics = Object.assign({},statistics);
   statistics.min_value = statistics.min_value === undefined ? null : encodeStatisticsValue(statistics.min_value, column);
   statistics.max_value = statistics.max_value === undefined ? null : encodeStatisticsValue(statistics.max_value, column);
@@ -383,7 +406,7 @@ function encodeStatistics(statistics,column) {
   return new parquet_thrift.Statistics(statistics);
 }
 
-async function encodePages(schema, rowBuffer, opts) {
+async function encodePages(schema: ParquetSchema, rowBuffer: parquet_shredder.RecordBuffer, opts: {bloomFilters: Record<string,SplitBlockBloomFilter>, useDataPageV2: boolean}) {// generic
   if (!rowBuffer.pageRowCount) {
     return;
   }
@@ -394,55 +417,55 @@ async function encodePages(schema, rowBuffer, opts) {
     }
 
     let page;
-    const values = rowBuffer.columnData[field.path];
+    const values = rowBuffer.columnData![field.path.join(',')];
 
     if (opts.bloomFilters && (field.name in opts.bloomFilters)) {
       const splitBlockBloomFilter = opts.bloomFilters[field.name];
-      values.values.forEach(v => splitBlockBloomFilter.insert(v));
+      values.values!.forEach(v => splitBlockBloomFilter.insert(v));
     }
 
-    let statistics;
+    let statistics: parquet_thrift.Statistics = {};
     if (field.statistics !== false) {
       statistics = {};
-      [...values.distinct_values].forEach( (v,i) => {
-        if (i === 0 || v > statistics.max_value) {
+      [...values.distinct_values!].forEach( (v,i) => {
+        if (i === 0 || v > statistics.max_value!) {
           statistics.max_value = v;
         }
-        if (i === 0 || v < statistics.min_value) {
+        if (i === 0 || v < statistics.min_value!) {
           statistics.min_value = v;
         }
       });
 
-      statistics.null_count = values.dlevels.length - values.values.length;
-      statistics.distinct_count = values.distinct_values.size;
+      statistics.null_count = new Int64(values.dlevels!.length - values.values!.length);
+      statistics.distinct_count = new Int64(values.distinct_values!.size);
     }
 
     if (opts.useDataPageV2) {
       page = await encodeDataPageV2(
         field,
-        values.count,
-        values.values,
-        values.rlevels,
-        values.dlevels,
-        statistics);
+        values.count!,
+        values.values!,
+        values.rlevels!,
+        values.dlevels!,
+        statistics!);
     } else {
       page = await encodeDataPage(
         field,
-        values.values,
-        values.rlevels,
-        values.dlevels,
-        statistics);
+        values.values || [],
+        values.rlevels || [],
+        values.dlevels || [],
+        statistics!);
     }
 
-    let pages = rowBuffer.pages[field.path];
+    let pages = rowBuffer.pages![field.path.join(',')];
     let lastPage = pages[pages.length-1];
-    let first_row_index = lastPage ? lastPage.first_row_index + lastPage.count : 0;
+    let first_row_index = lastPage ? lastPage.first_row_index + lastPage.count! : 0;
     pages.push({
       page,
       statistics,
       first_row_index,
-      distinct_values: values.distinct_values,
-      num_values: values.dlevels.length
+      distinct_values: values.distinct_values!,
+      num_values: values.dlevels!.length
     });
 
 
@@ -459,11 +482,11 @@ async function encodePages(schema, rowBuffer, opts) {
 /**
  * Encode a parquet data page
  */
-async function encodeDataPage(column, values, rlevels, dlevels, statistics) {
+async function encodeDataPage(column: ParquetField, values: number[], rlevels: number[], dlevels: number[], statistics: parquet_thrift.Statistics) {
   /* encode values */
   let valuesBuf = encodeValues(
-      column.primitiveType,
-      column.encoding,
+      column.primitiveType!,
+      column.encoding!,
       values, {
         typeLength: column.typeLength,
         bitWidth: column.typeLength
@@ -491,7 +514,7 @@ async function encodeDataPage(column, values, rlevels, dlevels, statistics) {
   /* build page header */
   let pageBody = Buffer.concat([rLevelsBuf, dLevelsBuf, valuesBuf]);
   pageBody = await parquet_compression.deflate(
-      column.compression,
+      column.compression!,
       pageBody);
 
   let pageHeader = new parquet_thrift.PageHeader();
@@ -504,7 +527,7 @@ async function encodeDataPage(column, values, rlevels, dlevels, statistics) {
     pageHeader.data_page_header.statistics = encodeStatistics(statistics, column);
   }
 
-  pageHeader.data_page_header.encoding = parquet_thrift.Encoding[column.encoding];
+  pageHeader.data_page_header.encoding = parquet_thrift.Encoding[column.encoding!];
   pageHeader.data_page_header.definition_level_encoding =
       parquet_thrift.Encoding[PARQUET_RDLVL_ENCODING];
   pageHeader.data_page_header.repetition_level_encoding =
@@ -517,18 +540,18 @@ async function encodeDataPage(column, values, rlevels, dlevels, statistics) {
 /**
  * Encode a parquet data page (v2)
  */
-async function encodeDataPageV2(column, rowCount, values, rlevels, dlevels, statistics) {
+async function encodeDataPageV2(column: ParquetField, rowCount: number, values: number[], rlevels: number[], dlevels: number[], statistics: parquet_thrift.Statistics) {
   /* encode values */
   let valuesBuf = encodeValues(
-      column.primitiveType,
-      column.encoding,
+      column.primitiveType!,
+      column.encoding!,
       values, {
         typeLength: column.typeLength,
         bitWidth: column.typeLength
       });
 
   let valuesBufCompressed = await parquet_compression.deflate(
-      column.compression,
+      column.compression!,
       valuesBuf);
 
   /* encode repetition and definition levels */
@@ -572,7 +595,7 @@ async function encodeDataPageV2(column, rowCount, values, rlevels, dlevels, stat
   pageHeader.compressed_page_size =
       rLevelsBuf.length + dLevelsBuf.length + valuesBufCompressed.length;
 
-  pageHeader.data_page_header_v2.encoding = parquet_thrift.Encoding[column.encoding];
+  pageHeader.data_page_header_v2.encoding = parquet_thrift.Encoding[column.encoding!];
   pageHeader.data_page_header_v2.definition_levels_byte_length = dLevelsBuf.length;
   pageHeader.data_page_header_v2.repetition_levels_byte_length = rLevelsBuf.length;
 
@@ -593,22 +616,22 @@ async function encodeDataPageV2(column, rowCount, values, rlevels, dlevels, stat
 /**
  * Encode an array of values into a parquet column chunk
  */
-async function encodeColumnChunk(pages, opts) {
+async function encodeColumnChunk(pages: Page[], opts: {column: ParquetField, baseOffset: number, pageSize: number, rowCount: number, useDataPageV2: boolean, pageIndex: boolean}) {
   let pagesBuf = Buffer.concat(pages.map(d => d.page));
   let num_values = pages.reduce((p,d) => p + d.num_values, 0);
   let offset = opts.baseOffset;
 
   /* prepare metadata header */
-  let metadata = new parquet_thrift.ColumnMetaData();
+  let metadata: ColumnMetaDataExt = new parquet_thrift.ColumnMetaData();
   metadata.path_in_schema = opts.column.path;
-  metadata.num_values = num_values;
-  metadata.data_page_offset = opts.baseOffset;
+  metadata.num_values = new Int64(num_values);
+  metadata.data_page_offset = new Int64(opts.baseOffset);
   metadata.encodings = [];
-  metadata.total_uncompressed_size = pagesBuf.length;
-  metadata.total_compressed_size = pagesBuf.length;
+  metadata.total_uncompressed_size = new Int64(pagesBuf.length);
+  metadata.total_compressed_size = new Int64(pagesBuf.length);
 
-  metadata.type = parquet_thrift.Type[opts.column.primitiveType];
-  metadata.codec = await parquet_thrift.CompressionCodec[opts.column.compression];
+  metadata.type = parquet_thrift.Type[opts.column.primitiveType!];
+  metadata.codec = await parquet_thrift.CompressionCodec[opts.column.compression!];
 
   /* compile statistics ColumnIndex and OffsetIndex*/
   let columnIndex = new parquet_thrift.ColumnIndex();
@@ -618,34 +641,34 @@ async function encodeColumnChunk(pages, opts) {
   offsetIndex.page_locations = [];
 
   /* prepare statistics */
-  let statistics = {};
+  let statistics: parquet_thrift.Statistics = {};
   let distinct_values = new Set();
-  statistics.null_count = 0;
-  statistics.distinct_count = 0;
+  statistics.null_count = new Int64(0);
+  statistics.distinct_count = new Int64(0);
 
   /* loop through pages and update indices and statistics */
   for (let i = 0; i < pages.length; i++) {
-    let page = pages[i];
+    const page = pages[i];
 
     if (opts.column.statistics !== false) {
-      if (page.statistics.max_value > statistics.max_value || i == 0) {
+      if (page.statistics.max_value! > statistics.max_value! || i == 0) {
         statistics.max_value = page.statistics.max_value;
       }
-      if (page.statistics.min_value < statistics.min_value || i == 0) {
+      if (page.statistics.min_value! < statistics.min_value! || i == 0) {
         statistics.min_value = page.statistics.min_value;
       }
-      statistics.null_count += page.statistics.null_count;
-      page.distinct_values.forEach(value => distinct_values.add(value));
+      statistics.null_count.setValue(statistics.null_count.valueOf() + (page.statistics.null_count?.valueOf() || 0));
+      page.distinct_values.forEach((value: unknown) => distinct_values.add(value));
 
       columnIndex.max_values.push( encodeStatisticsValue(page.statistics.max_value, opts.column) );
       columnIndex.min_values.push( encodeStatisticsValue(page.statistics.min_value, opts.column) );
     }
 
     let pageLocation = new parquet_thrift.PageLocation();
-    pageLocation.offset = offset;
+    pageLocation.offset = new Int64(offset);
     offset += page.page.length;
     pageLocation.compressed_page_size = page.page.length;
-    pageLocation.first_row_index = page.first_row_index;
+    pageLocation.first_row_index = new Int64(page.first_row_index);
     offsetIndex.page_locations.push(pageLocation);
   }
 
@@ -654,7 +677,7 @@ async function encodeColumnChunk(pages, opts) {
   }
 
   if (opts.column.statistics !== false) {
-    statistics.distinct_count = distinct_values.size;
+    statistics.distinct_count = new Int64(distinct_values.size);
     metadata.statistics = encodeStatistics(statistics, opts.column);
     if (opts.pageIndex !== false) {
       metadata.columnIndex = columnIndex;
@@ -662,12 +685,8 @@ async function encodeColumnChunk(pages, opts) {
   }
 
   /* list encodings */
-  let encodingsSet = {};
-  encodingsSet[PARQUET_RDLVL_ENCODING] = true;
-  encodingsSet[opts.column.encoding] = true;
-  for (let k in encodingsSet) {
-    metadata.encodings.push(parquet_thrift.Encoding[k]);
-  }
+  metadata.encodings.push(parquet_thrift.Encoding[PARQUET_RDLVL_ENCODING]);
+  metadata.encodings.push(parquet_thrift.Encoding[opts.column.encoding!]);
 
   /* concat metadata header and data pages */
   let metadataOffset = opts.baseOffset + pagesBuf.length;
@@ -678,11 +697,11 @@ async function encodeColumnChunk(pages, opts) {
 /**
  * Encode a list of column values into a parquet row group
  */
-async function encodeRowGroup(schema, data, opts) {
-  let metadata = new parquet_thrift.RowGroup();
-  metadata.num_rows = data.rowCount;
+async function encodeRowGroup(schema: ParquetSchema, data: parquet_shredder.RecordBuffer, opts: WriterOptions) {
+  let metadata: RowGroupExt = new parquet_thrift .RowGroup();
+  metadata.num_rows = new Int64(data.rowCount!);
   metadata.columns = [];
-  metadata.total_byte_size = 0;
+  metadata.total_byte_size = new Int64(0);
 
   let body = Buffer.alloc(0);
   for (let field of schema.fieldList) {
@@ -691,22 +710,21 @@ async function encodeRowGroup(schema, data, opts) {
     }
 
     let cchunkData = await encodeColumnChunk(
-      data.pages[field.path],
+      data.pages![field.path.join(',')],
       {
         column: field,
-        baseOffset: opts.baseOffset + body.length,
-        pageSize: opts.pageSize,
-        encoding: field.encoding,
-        rowCount: data.rowCount,
-        useDataPageV2: opts.useDataPageV2,
-        pageIndex: opts.pageIndex
+        baseOffset: opts.baseOffset!.valueOf() + body.length,
+        pageSize: opts.pageSize || 0,
+        rowCount: data.rowCount || 0,
+        useDataPageV2: opts.useDataPageV2 ?? true,
+        pageIndex: opts.pageIndex ?? true
       });
 
     let cchunk = new parquet_thrift.ColumnChunk();
-    cchunk.file_offset = cchunkData.metadataOffset;
+    cchunk.file_offset = new Int64(cchunkData.metadataOffset);
     cchunk.meta_data = cchunkData.metadata;
     metadata.columns.push(cchunk);
-    metadata.total_byte_size += cchunkData.body.length;
+    metadata.total_byte_size = new Int64(metadata.total_byte_size.valueOf() + (cchunkData.body.length));
 
     body = Buffer.concat([body, cchunkData.body]);
   }
@@ -717,7 +735,7 @@ async function encodeRowGroup(schema, data, opts) {
 /**
  * Encode a parquet file metadata footer
  */
-function encodeFooter(schema, rowCount, rowGroups, userMetadata) {
+function encodeFooter(schema: ParquetSchema, rowCount: Int64, rowGroups: RowGroupExt[], userMetadata: Record<string, string>) {
   let metadata = new parquet_thrift.FileMetaData()
   metadata.version = PARQUET_VERSION;
   metadata.created_by = '@dsnp/parquetjs';
@@ -748,7 +766,7 @@ function encodeFooter(schema, rowCount, rowGroups, userMetadata) {
     if (field.isNested) {
       schemaElem.num_children = field.fieldCount;
     } else {
-      schemaElem.type = parquet_thrift.Type[field.primitiveType];
+      schemaElem.type = parquet_thrift.Type[field.primitiveType!];
     }
 
     if (field.originalType) {
