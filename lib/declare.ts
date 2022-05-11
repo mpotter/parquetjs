@@ -1,9 +1,9 @@
-// Lifted from https://github.com/kbajalc/parquets
+// Thanks to https://github.com/kbajalc/parquets
 
-import parquet_thrift from "../../gen-nodejs/parquet_types";
-import { Statistics, OffsetIndex, ColumnIndex, PageType, DataPageHeader, DataPageHeaderV2, DictionaryPageHeader, IndexPageHeader, Type, ColumnMetaData } from "../../gen-nodejs/parquet_types";
-import SplitBlockBloomFilter from "../bloom/sbbf";
-import { createSBBFParams } from "../bloomFilterIO/bloomFilterWriter";
+import parquet_thrift from "../gen-nodejs/parquet_types";
+import { Statistics, OffsetIndex, ColumnIndex, PageType, DataPageHeader, DataPageHeaderV2, DictionaryPageHeader, IndexPageHeader, Type, ColumnMetaData } from "../gen-nodejs/parquet_types";
+import SplitBlockBloomFilter from "./bloom/sbbf";
+import { createSBBFParams } from "./bloomFilterIO/bloomFilterWriter";
 import Int64 from 'node-int64'
 
 export type ParquetCodec = 'PLAIN' | 'RLE';
@@ -27,8 +27,8 @@ export type OriginalType =
     | 'UTF8' // 0
     | 'MAP' // 1
     // | 'MAP_KEY_VALUE' // 2
-     | 'LIST' // 3
-    // | 'ENUM' // 4
+    | 'LIST' // 3
+    | 'ENUM' // 4
     // | 'DECIMAL' // 5
     | 'DATE' // 6
     | 'TIME_MILLIS' // 7
@@ -59,7 +59,7 @@ export interface FieldDefinition {
     optional?: boolean;
     repeated?: boolean;
     fields?: SchemaDefinition;
-    statistics?: Statistics
+    statistics?: Statistics | false;
     parent?: ParentField
     num_children?: NumChildrenField
 }
@@ -67,7 +67,7 @@ export interface FieldDefinition {
 export interface ParquetField {
     name: string;
     path: string[];
-    statistics?: Statistics
+    statistics?: Statistics | false;
     primitiveType?: PrimitiveType;
     originalType?: OriginalType;
     repetitionType: RepetitionType;
