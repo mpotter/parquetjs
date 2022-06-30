@@ -119,13 +119,26 @@ export class ParquetWriter {
     }
   }
 
+  async forceEmpty() {
+    if (this.envelopeWriter === null) {
+      throw 'writer was closed';
+    }
+
+    const options = {
+      useDataPageV2: this.envelopeWriter.useDataPageV2,
+      bloomFilters: this.envelopeWriter.bloomFilters
+    };
+    await encodeEmptyPage(this.schema, this.rowBuffer, options);
+    await this.envelopeWriter.writeRowGroup(this.rowBuffer);
+  }
+
   /**
    * Finish writing the parquet file and commit the footer to disk. This method
    * MUST be called after you are finished adding rows. You must not call this
    * method twice on the same object or add any rows after the close() method has
    * been called
    */
-  async close(callback?: Function) {
+  async close(callback?: Function, writeEmptyPage: boolean = false) {
     if (this.closed) {
       throw 'writer was closed';
     }
@@ -133,6 +146,11 @@ export class ParquetWriter {
     this.closed = true;
 
     if (this.envelopeWriter) {
+      if ((this.rowBuffer.rowCount || 0) === 0 && writeEmptyPage) {
+        // await encodeEmptyPage(this.schema, this.rowBuffer, { useDataPageV2: this.envelopeWriter.useDataPageV2, bloomFilters: this.envelopeWriter.bloomFilters});
+        // await encodeEmptyPage(this.schema, this.rowBuffer, { useDataPageV2: this.envelopeWriter.useDataPageV2, bloomFilters: this.envelopeWriter.bloomFilters});
+        await this.forceEmpty();
+      }
       if (this.rowBuffer.rowCount! > 0 || this.rowBuffer.rowCount! >= this.rowGroupSize) {
         await encodePages(this.schema, this.rowBuffer, { useDataPageV2: this.envelopeWriter.useDataPageV2, bloomFilters: this.envelopeWriter.bloomFilters});
 
@@ -403,6 +421,70 @@ function encodeStatistics(statistics: parquet_thrift.Statistics,column: ParquetF
   statistics.min = statistics.min_value;
 
   return new parquet_thrift.Statistics(statistics);
+}
+
+async function encodeEmptyPage(schema: ParquetSchema, rowBuffer: parquet_shredder.RecordBuffer, opts: {bloomFilters: Record<string,SplitBlockBloomFilter>, useDataPageV2: boolean}) {// generic
+  for (let field of schema.fieldList) {
+    if (field.isNested) {
+      continue;
+    }
+
+    let statistics: parquet_thrift.Statistics = {};
+    if (field.statistics !== false) {
+      statistics = {};
+      statistics.null_count = new Int64(0);
+      statistics.distinct_count = new Int64(0);
+    }
+
+    let page;
+    if (opts.useDataPageV2) {
+      page = await encodeDataPageV2(
+        field,
+        0,
+        [],
+        [],
+        [],
+        statistics!);
+    } else {
+      page = await encodeDataPage(
+        field,
+        [],
+        [],
+        [],
+        statistics!);
+    }
+
+    /* if no error during shredding, add the shredded record to the buffer */
+    if (!('columnData' in rowBuffer) || !('rowCount' in rowBuffer)) {
+      rowBuffer.rowCount = 0;
+      rowBuffer.pageRowCount = 0;
+      rowBuffer.columnData = {};
+      rowBuffer.pages = {};
+
+      for (let field of schema.fieldList) {
+        let path = field.path.join(',')
+        rowBuffer.columnData[path] = {
+          dlevels: [],
+          rlevels: [],
+          values: [],
+          distinct_values: new Set(),
+          count: 0
+        };
+        rowBuffer.pages[path] = [];
+      }
+    }
+
+    let pages = rowBuffer.pages![field.path.join(',')];
+    let lastPage = pages[pages.length-1];
+    let first_row_index = lastPage ? lastPage.first_row_index + lastPage.count! : 0;
+    pages.push({
+      page,
+      statistics,
+      first_row_index,
+      distinct_values: new Set(),
+      num_values: 0
+    });
+  }
 }
 
 async function encodePages(schema: ParquetSchema, rowBuffer: parquet_shredder.RecordBuffer, opts: {bloomFilters: Record<string,SplitBlockBloomFilter>, useDataPageV2: boolean}) {// generic
@@ -698,7 +780,7 @@ async function encodeColumnChunk(pages: Page[], opts: {column: ParquetField, bas
  */
 async function encodeRowGroup(schema: ParquetSchema, data: parquet_shredder.RecordBuffer, opts: WriterOptions) {
   let metadata: RowGroupExt = new parquet_thrift .RowGroup();
-  metadata.num_rows = new Int64(data.rowCount!);
+  metadata.num_rows = new Int64(data.rowCount || 0);
   metadata.columns = [];
   metadata.total_byte_size = new Int64(0);
 

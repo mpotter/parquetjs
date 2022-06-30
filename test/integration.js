@@ -576,5 +576,39 @@ describe('Parquet', function() {
       );
     });
   });
+
+  describe.only('writing an empty file', function () {
+    it('can be forced to write out a page with bloom filters', async function () {
+      const schema = new parquet.ParquetSchema({
+        announcementType: { type: "INT32", statistics: false  },
+        contentHash: { type: "BYTE_ARRAY", statistics: false },
+        createdAt: { type: "UINT_64", statistics: false  },
+        fromId: { type: "UINT_64", compression: "GZIP", statistics: false  },
+        url: { type: "UTF8", compression: "SNAPPY", statistics: false  },
+      });
+
+      const opts = {
+        useDataPageV2: true,
+        bloomFilters: [{column: "fromId"}],
+    };
+
+      await (await parquet.ParquetWriter.openFile(schema, "test-empty.parquet", opts)).close(undefined, true);
+      const reader = await parquet.ParquetReader.openFile("test-empty.parquet");
+      const outSchema = reader.getSchema();
+
+      await parquet.ParquetWriter.openFile(schema, "test-empty.parquet")
+
+      // writer.appendRow({
+      //   announcementType: 1,
+      //   contentHash: "0x0",
+      //   createdAt: 0,
+      //   fromId: 0,
+      //   url: "",
+      // })
+
+      console.log(await reader.getBloomFiltersFor(["fromId"]));
+      // expect(outSchema).equal(schema);
+    });
+  });
 });
 
