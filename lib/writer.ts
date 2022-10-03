@@ -11,7 +11,6 @@ import { Options } from './codec/types'
 import { ParquetSchema } from './schema'
 import Int64 from 'node-int64'
 import SplitBlockBloomFilter from './bloom/sbbf'
-import { ParquetModel } from "@frequency/parquet" // right?
 
 /**
  * Parquet File Magic String
@@ -73,27 +72,6 @@ export class ParquetWriter {
         opts);
 
     return new ParquetWriter(schema, envelopeWriter, opts);
-  }
-
-  /**
-   * Convenience method to create a new buffered parquet writer from Parquet Schema Model data
-   */
-  static fromModel (modelData: any, opts: any): ParquetWriter {
-
-    // construct schema from data
-    let schema: ParquetSchema = modelData.inferSchema()
-
-    // write and close fn
-    let emptyFn = () => {}
-
-    // empty writer options
-    let writerOpts = opts || {};
-
-    // construct envelope writer --- can any of these properties be changed later?
-    let envelopeWriter = new ParquetEnvelopeWriter(schema, emptyFn, emptyFn, new Int64(0), writerOpts)
-
-    return new ParquetWriter(schema, envelopeWriter, opts);
-
   }
 
   /**
