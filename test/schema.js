@@ -467,4 +467,61 @@ describe('ParquetSchema', function() {
     }
   });
 
+  it('should indicate which column had an invalid type in a simple flat schema', function() {
+    assert.throws(() => {
+      new parquet.ParquetSchema({
+        quantity: {type: 'UNKNOWN'},
+      })
+    }, 'Invalid parquet type: UNKNOWN, for Column: quantity');
+  });
+
+  it('should indicate each column which has an invalid type in a simple flat schema', function() {
+    assert.throws(() => {
+      new parquet.ParquetSchema({
+        quantity: {type: 'UNKNOWN'},
+        value: {type: 'UNKNOWN'},
+      })
+    }, 'Invalid parquet type: UNKNOWN, for Column: quantity\nInvalid parquet type: UNKNOWN, for Column: value');
+  });
+
+  it('should indicate each column which has an invalid type when one is correct in a simple flat schema', function() {
+    assert.throws(() => {
+      new parquet.ParquetSchema({
+        quantity: {type: 'INT32'},
+        value: {type: 'UNKNOWN'},
+      })
+    }, 'Invalid parquet type: UNKNOWN, for Column: value');
+  });
+
+  it('should indicate each column which has an invalid type in a nested schema', function() {
+    assert.throws(() => {
+      new parquet.ParquetSchema({
+        name: { type: 'UTF8' },
+        stock: {
+          fields: {
+            quantity: { type: 'UNKNOWN' },
+            warehouse: { type: 'UNKNOWN' },
+          }
+        },
+        price: { type: 'UNKNOWN' },
+      })
+    }, 'Invalid parquet type: UNKNOWN, for Column: stock.quantity\nInvalid parquet type: UNKNOWN, for Column: stock.warehouse');
+  });
+
+  it('should indicate which column had an invalid encoding in a simple flat schema', function() {
+    assert.throws(() => {
+      new parquet.ParquetSchema({
+        quantity: {type: 'INT32', encoding: 'UNKNOWN'},
+      })
+    }, 'Unsupported parquet encoding: UNKNOWN, for Column: quantity');
+  });
+
+  it('should indicate which column had an invalid compression type in a simple flat schema', function() {
+    assert.throws(() => {
+      new parquet.ParquetSchema({
+        quantity: {type: 'INT32', compression: 'UNKNOWN'},
+      })
+    }, 'Unsupported compression method: UNKNOWN, for Column: quantity');
+  });
+
 });
