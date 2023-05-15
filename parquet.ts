@@ -2,6 +2,7 @@ import * as reader from './lib/reader';
 import * as writer from './lib/writer';
 import * as schema from './lib/schema';
 import * as shredder from './lib/shred';
+import * as fields from './lib/fields';
 
 export type ParquetEnvelopeReader = reader.ParquetEnvelopeReader;
 export type ParquetReader = reader.ParquetReader;
@@ -17,6 +18,7 @@ export const ParquetWriter = writer.ParquetWriter;
 export const ParquetTransformer = writer.ParquetTransformer;
 export const ParquetSchema = schema.ParquetSchema;
 export const ParquetShredder = shredder;
+export const ParquetFieldBuilder = fields;
 
 export default {
     ParquetEnvelopeReader,
@@ -26,4 +28,5 @@ export default {
     ParquetTransformer,
     ParquetSchema,
     ParquetShredder,
+    ParquetFieldBuilder,
 }
