@@ -386,25 +386,34 @@ function fromPrimitive_BSON(value: Buffer) {
   return BSON.deserialize(value);
 }
 
-function toPrimitive_TIME_MILLIS(value: string | number) {
-  let v = value
-  if (typeof value === `string`) {
-    v = parseInt(value, 10);
+function toNumberInternal(typeName: string, value: string | number): number {
+  let numberValue = 0;
+  switch (typeof value) {
+    case "string":
+      numberValue = parseInt(value, 10);
+      break;
+    case "number":
+      numberValue = value;
+      break;
+    default:
+      throw `${typeName} has an invalid type: ${typeof value}`;
   }
   // Year 2255 bug. Should eventually switch to bigint
-  if (v < 0 || v > (Number.MAX_SAFE_INTEGER - 1) || typeof v !== 'number') {
-    throw 'invalid value for TIME_MILLIS: ' + value;
+  if (numberValue < 0 || numberValue >= Number.MAX_SAFE_INTEGER) {
+    throw `${typeName} value is out of bounds: ${numberValue}`;
   }
+  return numberValue
+}
 
-  return v;
+function toPrimitive_TIME_MILLIS(value: string | number) {
+  return toNumberInternal("TIME_MILLIS", value);
 }
 
 function toPrimitive_TIME_MICROS(value: string | number | bigint) {
   const v = BigInt(value);
   if (v < 0n ) {
-    throw 'invalid value for TIME_MICROS: ' + value;
+    throw 'TIME_MICROS value is out of bounds: ' + value;
   }
-
   return v;
 }
 
@@ -415,19 +424,7 @@ function toPrimitive_DATE(value: string | Date | number) {
   if (value instanceof Date) {
     return value.getTime() / kMillisPerDay;
   }
-
-/* convert from integer */
-  let v = value
-  if (typeof value === 'string') {
-    v = parseInt(value, 10);
-  }
-
-  if (v < 0 || typeof v !== 'number') {
-    throw 'invalid value for DATE: ' + value;
-  }
-
-  return v;
-
+  return toNumberInternal("DATE", value )
 }
 
 function fromPrimitive_DATE(value: number ) {
@@ -440,20 +437,7 @@ function toPrimitive_TIMESTAMP_MILLIS(value: string | Date | number) {
   if (value instanceof Date) {
     return value.getTime();
   }
-
-  /* convert from integer */
-
-  let v = value
-   if (typeof value === 'string' ) {
-    v = parseInt(value, 10);
-   }
-
-  if (v < 0 || typeof v !== 'number') {
-    throw 'invalid value for TIMESTAMP_MILLIS: ' + value;
-  }
-
-  return v;
-
+  return toNumberInternal("TIMESTAMP_MILLIS", value);
 }
 
 function fromPrimitive_TIMESTAMP_MILLIS(value: number | string | bigint) {
@@ -471,12 +455,12 @@ function toPrimitive_TIMESTAMP_MICROS(value: Date | string | number | bigint) {
     // Will throw if NaN
     const v = BigInt(value);
     if (v < 0n) {
-      throw 'Cannot be less than zero';
+      throw 'out of bounds';
     }
 
     return v;
   } catch (e) {
-    throw 'invalid value for TIMESTAMP_MICROS: ' + value;
+    throw 'TIMESTAMP_MICROS value is out of bounds: ' + value;
   }
 }
 
