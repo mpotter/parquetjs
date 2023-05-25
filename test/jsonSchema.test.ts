@@ -26,28 +26,28 @@ describe("Json Schema Conversion", function () {
     const js = addressSchema as JSONSchema4;
 
     const ps = ParquetSchema.fromJsonSchema(js);
-    checkSnapshot(ps, './test-files/address.schema.result.json', update);
+    checkSnapshot(ps, './test-files/address.schema.snapshot.json', update);
   });
 
   it("Arrays", function () {
     const js = arraySchema as JSONSchema4;
 
     const ps = ParquetSchema.fromJsonSchema(js);
-    checkSnapshot(ps, './test-files/array.schema.result.json', update);
+    checkSnapshot(ps, './test-files/array.schema.snapshot.json', update);
   });
 
   it("Objects", function () {
     const js = objectSchema as JSONSchema4;
 
     const ps = ParquetSchema.fromJsonSchema(js);
-    checkSnapshot(ps, './test-files/object.schema.result.json', update);
+    checkSnapshot(ps, './test-files/object.schema.snapshot.json', update);
   });
 
   it("Nested Objects", function () {
     const js = objectNestedSchema as JSONSchema4;
 
     const ps = ParquetSchema.fromJsonSchema(js);
-    checkSnapshot(ps, './test-files/object-nested.schema.result.json', update);
+    checkSnapshot(ps, './test-files/object-nested.schema.snapshot.json', update);
   });
 });
 
@@ -149,12 +149,12 @@ describe("Json Schema Conversion Test File", async function () {
   });
 
   it('schema is generated correctly', async function () {
-    checkSnapshot(parquetSchema, './test-files/json-schema-test-file.schema.result.json', update);
+    checkSnapshot(parquetSchema, './test-files/json-schema-test-file.schema.snapshot.json', update);
   });
 
   it('schema is encoded correctly', async function () {
     const schema = reader.metadata?.schema;
-    checkSnapshot(reader.metadata?.schema, './test-files/json-schema-test-file.result.json', update);
+    checkSnapshot(reader.metadata?.schema, './test-files/json-schema-test-file.snapshot.json', update);
   });
 
   it('output matches input', async function () {
