@@ -1,9 +1,11 @@
 import * as parquet_codec from './codec';
 import * as parquet_compression from './compression'
 import * as parquet_types from './types'
-import { SchemaDefinition, ParquetField, RepetitionType, FieldDefinition } from './declare'
+import { SchemaDefinition, ParquetField, RepetitionType, FieldDefinition, WriterOptions } from './declare'
 import { JSONSchema4 } from 'json-schema'
 import { fromJsonSchema } from './jsonSchema';
+import { fromFrequencySchema, FrequencySchema } from './frequencySchema';
+import { createSBBFParams } from './bloomFilterIO/bloomFilterWriter';
 
 const PARQUET_COLUMN_KEY_SEPARATOR = '.';
 
@@ -22,6 +24,22 @@ export class ParquetSchema {
   static fromJsonSchema(jsonSchema: JSONSchema4) {
     const schema: SchemaDefinition = fromJsonSchema(jsonSchema);
     return new ParquetSchema(schema);
+  }
+
+  /**
+   * Create a new schema from a Frequency Parquet Schema (frequency.xyz)
+   * Also provides the Writer Options as Frequency Schemas support bloom filter selection.
+   */
+  static fromFrequencySchema(frequencySchema: FrequencySchema): [ParquetSchema, WriterOptions] {
+    const schema: SchemaDefinition = fromFrequencySchema(frequencySchema);
+    const bloomFilters = frequencySchema.reduce<createSBBFParams[]>((acc, x) => {
+      if (x.bloom_filter) acc.push({ column: x.name });
+      return acc;
+    }, []);
+
+    return [new ParquetSchema(schema), {
+      bloomFilters
+    }];
   }
 
   /**
@@ -130,10 +148,10 @@ function buildFields(schema: SchemaDefinition, rLevelParentMax?: number, dLevelP
         statistics: opts.statistics,
         fieldCount: Object.keys(opts.fields).length,
         fields: buildFields(
-            opts.fields,
-            rLevelMax,
-            dLevelMax,
-            path.concat(name))
+          opts.fields,
+          rLevelMax,
+          dLevelMax,
+          path.concat(name))
       };
 
       if (opts.type == 'LIST' || opts.type == 'MAP') fieldList[name].originalType = opts.type;
@@ -219,19 +237,19 @@ function isDefined<T>(val: T | undefined): val is T {
 
 function errorsForDecimalOpts(type: string, opts: FieldDefinition, columnName: string): string[] {
   const fieldErrors = []
-  if(!opts.precision) {
+  if (!opts.precision) {
     fieldErrors.push(
-        `invalid schema for type: ${type}, for Column: ${columnName}, precision is required`
+      `invalid schema for type: ${type}, for Column: ${columnName}, precision is required`
     );
   }
   else if (opts.precision > 18) {
     fieldErrors.push(
-        `invalid precision for type: ${type}, for Column: ${columnName}, can not handle precision over 18`
+      `invalid precision for type: ${type}, for Column: ${columnName}, can not handle precision over 18`
     );
   }
   if (!opts.scale) {
     fieldErrors.push(
-        `invalid schema for type: ${type}, for Column: ${columnName}, scale is required`
+      `invalid schema for type: ${type}, for Column: ${columnName}, scale is required`
     );
   }
   return fieldErrors

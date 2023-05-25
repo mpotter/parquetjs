@@ -1,0 +1,62 @@
+[
+  {
+    "type": null,
+    "type_length": null,
+    "repetition_type": null,
+    "name": "root",
+    "num_children": 4,
+    "converted_type": null,
+    "scale": null,
+    "precision": null,
+    "field_id": null,
+    "logicalType": null
+  },
+  {
+    "type": 1,
+    "type_length": null,
+    "repetition_type": 0,
+    "name": "announcementType",
+    "num_children": null,
+    "converted_type": 17,
+    "scale": null,
+    "precision": null,
+    "field_id": null,
+    "logicalType": null
+  },
+  {
+    "type": 6,
+    "type_length": null,
+    "repetition_type": 0,
+    "name": "contentHash",
+    "num_children": null,
+    "converted_type": null,
+    "scale": null,
+    "precision": null,
+    "field_id": null,
+    "logicalType": null
+  },
+  {
+    "type": 2,
+    "type_length": null,
+    "repetition_type": 0,
+    "name": "fromId",
+    "num_children": null,
+    "converted_type": 14,
+    "scale": null,
+    "precision": null,
+    "field_id": null,
+    "logicalType": null
+  },
+  {
+    "type": 6,
+    "type_length": null,
+    "repetition_type": 0,
+    "name": "url",
+    "num_children": null,
+    "converted_type": 0,
+    "scale": null,
+    "precision": null,
+    "field_id": null,
+    "logicalType": null
+  }
+]

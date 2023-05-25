@@ -1,0 +1,142 @@
+{
+  "schema": {
+    "announcementType": {
+      "type": "INT_32",
+      "compression": "GZIP",
+      "statistics": false,
+      "encoding": "PLAIN"
+    },
+    "contentHash": {
+      "type": "BYTE_ARRAY",
+      "compression": "GZIP",
+      "statistics": false,
+      "encoding": "PLAIN"
+    },
+    "fromId": {
+      "type": "UINT_64",
+      "compression": "GZIP",
+      "statistics": false,
+      "encoding": "PLAIN"
+    },
+    "url": {
+      "type": "UTF8",
+      "compression": "GZIP",
+      "statistics": false,
+      "encoding": "PLAIN"
+    }
+  },
+  "fields": {
+    "announcementType": {
+      "name": "announcementType",
+      "primitiveType": "INT32",
+      "originalType": "INT_32",
+      "path": [
+        "announcementType"
+      ],
+      "repetitionType": "REQUIRED",
+      "encoding": "PLAIN",
+      "statistics": false,
+      "compression": "GZIP",
+      "rLevelMax": 0,
+      "dLevelMax": 0
+    },
+    "contentHash": {
+      "name": "contentHash",
+      "primitiveType": "BYTE_ARRAY",
+      "path": [
+        "contentHash"
+      ],
+      "repetitionType": "REQUIRED",
+      "encoding": "PLAIN",
+      "statistics": false,
+      "compression": "GZIP",
+      "rLevelMax": 0,
+      "dLevelMax": 0
+    },
+    "fromId": {
+      "name": "fromId",
+      "primitiveType": "INT64",
+      "originalType": "UINT_64",
+      "path": [
+        "fromId"
+      ],
+      "repetitionType": "REQUIRED",
+      "encoding": "PLAIN",
+      "statistics": false,
+      "compression": "GZIP",
+      "rLevelMax": 0,
+      "dLevelMax": 0
+    },
+    "url": {
+      "name": "url",
+      "primitiveType": "BYTE_ARRAY",
+      "originalType": "UTF8",
+      "path": [
+        "url"
+      ],
+      "repetitionType": "REQUIRED",
+      "encoding": "PLAIN",
+      "statistics": false,
+      "compression": "GZIP",
+      "rLevelMax": 0,
+      "dLevelMax": 0
+    }
+  },
+  "fieldList": [
+    {
+      "name": "announcementType",
+      "primitiveType": "INT32",
+      "originalType": "INT_32",
+      "path": [
+        "announcementType"
+      ],
+      "repetitionType": "REQUIRED",
+      "encoding": "PLAIN",
+      "statistics": false,
+      "compression": "GZIP",
+      "rLevelMax": 0,
+      "dLevelMax": 0
+    },
+    {
+      "name": "contentHash",
+      "primitiveType": "BYTE_ARRAY",
+      "path": [
+        "contentHash"
+      ],
+      "repetitionType": "REQUIRED",
+      "encoding": "PLAIN",
+      "statistics": false,
+      "compression": "GZIP",
+      "rLevelMax": 0,
+      "dLevelMax": 0
+    },
+    {
+      "name": "fromId",
+      "primitiveType": "INT64",
+      "originalType": "UINT_64",
+      "path": [
+        "fromId"
+      ],
+      "repetitionType": "REQUIRED",
+      "encoding": "PLAIN",
+      "statistics": false,
+      "compression": "GZIP",
+      "rLevelMax": 0,
+      "dLevelMax": 0
+    },
+    {
+      "name": "url",
+      "primitiveType": "BYTE_ARRAY",
+      "originalType": "UTF8",
+      "path": [
+        "url"
+      ],
+      "repetitionType": "REQUIRED",
+      "encoding": "PLAIN",
+      "statistics": false,
+      "compression": "GZIP",
+      "rLevelMax": 0,
+      "dLevelMax": 0
+    }
+  ]
+}
