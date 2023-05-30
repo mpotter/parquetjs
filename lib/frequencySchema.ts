@@ -1,7 +1,5 @@
 // Support Frequency Parquet Schema conversion to a Parquet file
-import * as fields from './fields';
 import { ParquetCompression, FieldDefinition, ParquetType, SchemaDefinition, supportedTypes } from './declare';
-import { TimeType, TimestampType } from '../gen-nodejs/parquet_types';
 
 export type FrequencySchema = Array<ParquetColumn>;
 
@@ -78,11 +76,16 @@ const convertColumnType = (columnType: FrequencyParquetType): FieldDefinition["t
         if (isColumnTypeSupported(columnType)) return columnType;
         throw new UnsupportedFrequencySchemaError(columnType.toString());
     }
+    // ParquetJs uses the old format still, so not all options are available
     if ("INTEGER" in columnType) {
-        // ParquetJs uses the old format still
         return `${columnType.INTEGER.sign ? "" : "U"}INT_${columnType.INTEGER.bit_width}` as ParquetType;
     }
-
+    if ("TIMESTAMP" in columnType && columnType.TIMESTAMP.is_adjusted_to_utc && columnType.TIMESTAMP.unit !== "NANOS") {
+        return `TIMESTAMP_${columnType.TIMESTAMP.unit}` as ParquetType;
+    }
+    if ("TIME" in columnType && columnType.TIME.is_adjusted_to_utc && columnType.TIME.unit !== "NANOS") {
+        return `TIME_${columnType.TIME.unit}` as ParquetType;
+    }
 
     throw new UnsupportedFrequencySchemaError(columnType.toString());
 };

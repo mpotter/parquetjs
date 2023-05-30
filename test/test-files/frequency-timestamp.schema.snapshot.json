@@ -1,0 +1,178 @@
+{
+  "schema": {
+    "micro": {
+      "type": "TIMESTAMP_MICROS",
+      "compression": "UNCOMPRESSED",
+      "statistics": false,
+      "encoding": "PLAIN"
+    },
+    "milli": {
+      "type": "TIMESTAMP_MILLIS",
+      "compression": "UNCOMPRESSED",
+      "statistics": false,
+      "encoding": "PLAIN"
+    },
+    "time micro": {
+      "type": "TIME_MICROS",
+      "compression": "UNCOMPRESSED",
+      "statistics": false,
+      "encoding": "PLAIN"
+    },
+    "time milli": {
+      "type": "TIME_MILLIS",
+      "compression": "UNCOMPRESSED",
+      "statistics": false,
+      "encoding": "PLAIN"
+    },
+    "date": {
+      "type": "DATE",
+      "compression": "UNCOMPRESSED",
+      "statistics": false,
+      "encoding": "PLAIN"
+    }
+  },
+  "fields": {
+    "micro": {
+      "name": "micro",
+      "primitiveType": "INT64",
+      "originalType": "TIMESTAMP_MICROS",
+      "path": [
+        "micro"
+      ],
+      "repetitionType": "REQUIRED",
+      "encoding": "PLAIN",
+      "statistics": false,
+      "compression": "UNCOMPRESSED",
+      "rLevelMax": 0,
+      "dLevelMax": 0
+    },
+    "milli": {
+      "name": "milli",
+      "primitiveType": "INT64",
+      "originalType": "TIMESTAMP_MILLIS",
+      "path": [
+        "milli"
+      ],
+      "repetitionType": "REQUIRED",
+      "encoding": "PLAIN",
+      "statistics": false,
+      "compression": "UNCOMPRESSED",
+      "rLevelMax": 0,
+      "dLevelMax": 0
+    },
+    "time micro": {
+      "name": "time micro",
+      "primitiveType": "INT64",
+      "originalType": "TIME_MICROS",
+      "path": [
+        "time micro"
+      ],
+      "repetitionType": "REQUIRED",
+      "encoding": "PLAIN",
+      "statistics": false,
+      "compression": "UNCOMPRESSED",
+      "rLevelMax": 0,
+      "dLevelMax": 0
+    },
+    "time milli": {
+      "name": "time milli",
+      "primitiveType": "INT32",
+      "originalType": "TIME_MILLIS",
+      "path": [
+        "time milli"
+      ],
+      "repetitionType": "REQUIRED",
+      "encoding": "PLAIN",
+      "statistics": false,
+      "compression": "UNCOMPRESSED",
+      "rLevelMax": 0,
+      "dLevelMax": 0
+    },
+    "date": {
+      "name": "date",
+      "primitiveType": "INT32",
+      "originalType": "DATE",
+      "path": [
+        "date"
+      ],
+      "repetitionType": "REQUIRED",
+      "encoding": "PLAIN",
+      "statistics": false,
+      "compression": "UNCOMPRESSED",
+      "rLevelMax": 0,
+      "dLevelMax": 0
+    }
+  },
+  "fieldList": [
+    {
+      "name": "micro",
+      "primitiveType": "INT64",
+      "originalType": "TIMESTAMP_MICROS",
+      "path": [
+        "micro"
+      ],
+      "repetitionType": "REQUIRED",
+      "encoding": "PLAIN",
+      "statistics": false,
+      "compression": "UNCOMPRESSED",
+      "rLevelMax": 0,
+      "dLevelMax": 0
+    },
+    {
+      "name": "milli",
+      "primitiveType": "INT64",
+      "originalType": "TIMESTAMP_MILLIS",
+      "path": [
+        "milli"
+      ],
+      "repetitionType": "REQUIRED",
+      "encoding": "PLAIN",
+      "statistics": false,
+      "compression": "UNCOMPRESSED",
+      "rLevelMax": 0,
+      "dLevelMax": 0
+    },
+    {
+      "name": "time micro",
+      "primitiveType": "INT64",
+      "originalType": "TIME_MICROS",
+      "path": [
+        "time micro"
+      ],
+      "repetitionType": "REQUIRED",
+      "encoding": "PLAIN",
+      "statistics": false,
+      "compression": "UNCOMPRESSED",
+      "rLevelMax": 0,
+      "dLevelMax": 0
+    },
+    {
+      "name": "time milli",
+      "primitiveType": "INT32",
+      "originalType": "TIME_MILLIS",
+      "path": [
+        "time milli"
+      ],
+      "repetitionType": "REQUIRED",
+      "encoding": "PLAIN",
+      "statistics": false,
+      "compression": "UNCOMPRESSED",
+      "rLevelMax": 0,
+      "dLevelMax": 0
+    },
+    {
+      "name": "date",
+      "primitiveType": "INT32",
+      "originalType": "DATE",
+      "path": [
+        "date"
+      ],
+      "repetitionType": "REQUIRED",
+      "encoding": "PLAIN",
+      "statistics": false,
+      "compression": "UNCOMPRESSED",
+      "rLevelMax": 0,
+      "dLevelMax": 0
+    }
+  ]
+}

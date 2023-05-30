@@ -65,6 +65,62 @@ describe("Frequency Schema Conversion", function () {
       ]
     });
   });
+
+  it("Time Schema", function () {
+    const [schema] = ParquetSchema.fromFrequencySchema([
+      {
+        name: "micro",
+        column_type: {
+          TIMESTAMP: {
+            unit: "MICROS",
+            is_adjusted_to_utc: true,
+          },
+        },
+        compression: "UNCOMPRESSED",
+        bloom_filter: false,
+      },
+      {
+        name: "milli",
+        column_type: {
+          TIMESTAMP: {
+            unit: "MILLIS",
+            is_adjusted_to_utc: true,
+          },
+        },
+        compression: "UNCOMPRESSED",
+        bloom_filter: false,
+      },
+      {
+        name: "time micro",
+        column_type: {
+          TIME: {
+            unit: "MICROS",
+            is_adjusted_to_utc: true,
+          },
+        },
+        compression: "UNCOMPRESSED",
+        bloom_filter: false,
+      },
+      {
+        name: "time milli",
+        column_type: {
+          TIME: {
+            unit: "MILLIS",
+            is_adjusted_to_utc: true,
+          },
+        },
+        compression: "UNCOMPRESSED",
+        bloom_filter: false,
+      },
+      {
+        name: "date",
+        column_type: "DATE",
+        compression: "UNCOMPRESSED",
+        bloom_filter: false,
+      }
+    ]);
+    checkSnapshot(schema, './test-files/frequency-timestamp.schema.snapshot.json', update);
+  });
 });
 
 describe("Frequency Schema Conversion Test File", async function () {
