@@ -64,6 +64,9 @@ const fromJsonSchemaArray = (fieldValue: SupportedJSONSchema4, optionalFieldList
 
     switch (fieldValue.items.type) {
         case 'string':
+            if (fieldValue.items.format && fieldValue.items.format == 'date-time') {
+                return fields.createListField('TIMESTAMP_MILLIS', optionalFieldList);
+            }
             return fields.createListField('UTF8', optionalFieldList);
         case 'integer':
         case 'number':
@@ -88,6 +91,9 @@ const fromJsonSchemaField = (jsonSchema: JSONSchema4) => (fieldName: string, fie
 
     switch (fieldValue.type) {
         case 'string':
+            if (fieldValue.format && fieldValue.format == 'date-time') {
+                return fields.createTimestampField(optional);
+            }
             return fields.createStringField(optional);
         case 'integer':
         case 'number':

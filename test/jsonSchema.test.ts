@@ -63,7 +63,18 @@ describe("Json Schema Conversion Test File", async function () {
         "items": { "type": "string" },
         "additionalItems": false
       },
-      "timestamp_field": { "type": "string" },
+      "timestamp_array_field": {
+        "type": "array",
+        "items": { 
+          "type": "string", 
+          "format": "date-time"
+        },
+        "additionalItems": false,
+      },
+      "timestamp_field": { 
+        "type": "string",
+        "format": "date-time"
+      },
       "obj_field": {
         "type": "object",
         "properties": {
@@ -107,7 +118,9 @@ describe("Json Schema Conversion Test File", async function () {
   const row1 = {
     string_field: 'string value',
     int_field: 10n,
-    timestamp_field: new Date("2023-01-01 GMT").toUTCString(),
+    timestamp_array_field: { list: [{ element: new Date("2023-01-01 GMT") }] },
+
+    timestamp_field: new Date("2023-01-01 GMT"),
 
     array_field: {
       list: [{ element: 'array_field val1' }, { element: 'array_field val2' }],
@@ -162,7 +175,6 @@ describe("Json Schema Conversion Test File", async function () {
     const row = await cursor.next();
     const rowData = {
       ...row1,
-      timestamp_field: "Sun, 01 Jan 2023 00:00:00 GMT",
     };
     assert.deepEqual(row, rowData);
   });
