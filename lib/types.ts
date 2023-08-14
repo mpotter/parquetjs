@@ -1,17 +1,16 @@
 'use strict';
 // Thanks to https://github.com/kbajalc/parquets for some of the code.
 import * as BSON from "bson"
-import { PrimitiveType, OriginalType, ParquetType } from "./declare"
+import { PrimitiveType, OriginalType, ParquetType, FieldDefinition, ParquetField } from "./declare"
+import { Options } from "./codec/types";
 
-type ParquetTypeData = {
-  [Property in ParquetType]: {
-    primitiveType?: PrimitiveType,
-    toPrimitive: Function,
-    fromPrimitive?: Function,
-    originalType?: OriginalType,
-    typeLength?: number
-  }
-}
+type ParquetTypeDataObject = {
+  primitiveType?: PrimitiveType,
+  toPrimitive: Function,
+  fromPrimitive?: Function,
+  originalType?: OriginalType,
+  typeLength?: number
+};
 
 interface INTERVAL {
   months: number,
@@ -19,7 +18,67 @@ interface INTERVAL {
   milliseconds: number
 }
 
-export const PARQUET_LOGICAL_TYPES: ParquetTypeData = {
+export function getParquetTypeDataObject(type: ParquetType, field?: ParquetField | Options | FieldDefinition): ParquetTypeDataObject {
+  if (type === 'DECIMAL') {
+    if (field?.typeLength !== undefined) {
+      return {
+        primitiveType: 'FIXED_LEN_BYTE_ARRAY',
+        originalType: 'DECIMAL',
+        typeLength: field.typeLength,
+        toPrimitive: toPrimitive_FIXED_LEN_BYTE_ARRAY_DECIMAL
+      };
+    } else if (field?.precision !== undefined && field.precision > 18) {
+      return {
+        primitiveType: 'BYTE_ARRAY',
+        originalType: 'DECIMAL',
+        typeLength: field.typeLength,
+        toPrimitive: toPrimitive_BYTE_ARRAY_DECIMAL
+      };
+    } else {
+      return {
+        primitiveType: 'INT64',
+        originalType: 'DECIMAL',
+        toPrimitive: toPrimitive_INT64
+      };
+    }
+  } else {
+    return PARQUET_LOGICAL_TYPE_DATA[type];
+  }
+}
+
+const PARQUET_LOGICAL_TYPES = new Set<string>([
+  'BOOLEAN',
+  'INT32',
+  'INT64',
+  'INT96',
+  'FLOAT',
+  'DOUBLE',
+  'BYTE_ARRAY',
+  'FIXED_LEN_BYTE_ARRAY',
+  'UTF8',
+  'ENUM',
+  'TIME_MILLIS',
+  'TIME_MICROS',
+  'DATE',
+  'TIMESTAMP_MILLIS',
+  'TIMESTAMP_MICROS',
+  'UINT_8',
+  'UINT_16',
+  'UINT_32',
+  'UINT_64',
+  'INT_8',
+  'INT_16',
+  'INT_32',
+  'INT_64',
+  'DECIMAL',
+  'JSON',
+  'BSON',
+  'INTERVAL',
+  'MAP',
+  'LIST'
+] satisfies ParquetType[])
+
+const PARQUET_LOGICAL_TYPE_DATA: { [logicalType: string]: ParquetTypeDataObject } = {
   'BOOLEAN': {
     primitiveType: 'BOOLEAN',
     toPrimitive: toPrimitive_BOOLEAN,
@@ -133,11 +192,6 @@ export const PARQUET_LOGICAL_TYPES: ParquetTypeData = {
     originalType: 'INT_64',
     toPrimitive: toPrimitive_INT64
   },
-  'DECIMAL': {
-    primitiveType: 'INT64',
-    originalType: 'DECIMAL',
-    toPrimitive: toPrimitive_INT64
-  },
   'JSON': {
     primitiveType: 'BYTE_ARRAY',
     originalType: 'JSON',
@@ -173,31 +227,30 @@ export const PARQUET_LOGICAL_TYPES: ParquetTypeData = {
  * @returns if type is a valid Parquet Type
  */
 function isParquetType(type: string | undefined): type is ParquetType {
-  return type !== undefined && (type in PARQUET_LOGICAL_TYPES);
+  return type !== undefined && PARQUET_LOGICAL_TYPES.has(type);
 }
 
 /**
  * Convert a value from it's native representation to the internal/underlying
  * primitive type
  */
-export function toPrimitive(type: string | undefined, value: unknown) {
+export function toPrimitive(type: string | undefined, value: unknown, field?: ParquetField | Options) {
   if (!isParquetType(type)) {
     throw 'invalid type: ' + type || "undefined";
   }
-
-  return PARQUET_LOGICAL_TYPES[type].toPrimitive(value);
+  return getParquetTypeDataObject(type, field).toPrimitive(value);
 }
 
 /**
  * Convert a value from it's internal/underlying primitive representation to
  * the native representation
  */
-export function fromPrimitive(type: string | undefined, value: unknown) {
+export function fromPrimitive(type: string | undefined, value: unknown, field?: ParquetField | Options) {
   if (!isParquetType(type)) {
     throw 'invalid type: ' + type || "undefined";
   }
 
-  const typeFromPrimitive = PARQUET_LOGICAL_TYPES[type].fromPrimitive
+  const typeFromPrimitive = getParquetTypeDataObject(type, field).fromPrimitive
   if (typeFromPrimitive !== undefined) {
     return typeFromPrimitive(value)
   } else {
@@ -348,6 +401,14 @@ function toPrimitive_INT96(value: number | bigint | string) {
   } catch {
       throw 'invalid value for INT96: ' + value;
   }
+}
+
+function toPrimitive_FIXED_LEN_BYTE_ARRAY_DECIMAL(value: Array<number>) {
+  return Buffer.from(value);
+}
+
+function toPrimitive_BYTE_ARRAY_DECIMAL(value: Array<number>) {
+  return Buffer.from(value);
 }
 
 function toPrimitive_MAP(value: any) {
